@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding:utf-8 -*-
-# Copyright (c) Megvii, Inc. and its affiliates.
-
 import os
 
 from yolox.exp import Exp as MyExp
@@ -13,3 +9,15 @@ class Exp(MyExp):
         self.depth = 0.33
         self.width = 0.50
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
+
+        self.num_classes = 1
+        self.max_epoch = 200
+        self.data_num_workers = 4
+        self.eval_interval = 1
+        self.test_size = (320, 320)
+        self.input_size = (320, 320)
+        self.multiscale_range = 1
+
+        self.data_dir = r"/mnt/n/_temp/SoS2.6_NDS_extended2"
+        self.train_ann = r"/mnt/n/_temp/SoS2.6_NDS_extended2/annotations/instances_train2017.json"
+        self.val_ann = r"/mnt/n/_temp/SoS2.6_NDS_extended2/annotations/instances_val2017.json"

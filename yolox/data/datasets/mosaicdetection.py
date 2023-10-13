@@ -9,7 +9,6 @@ import numpy as np
 
 from yolox.utils import adjust_box_anns, get_local_rank
 
-from ..data_augment import random_affine
 from .datasets_wrapper import Dataset
 
 
@@ -124,16 +123,6 @@ class MosaicDetection(Dataset):
                 np.clip(mosaic_labels[:, 1], 0, 2 * input_h, out=mosaic_labels[:, 1])
                 np.clip(mosaic_labels[:, 2], 0, 2 * input_w, out=mosaic_labels[:, 2])
                 np.clip(mosaic_labels[:, 3], 0, 2 * input_h, out=mosaic_labels[:, 3])
-
-            mosaic_img, mosaic_labels = random_affine(
-                mosaic_img,
-                mosaic_labels,
-                target_size=(input_w, input_h),
-                degrees=self.degrees,
-                translate=self.translate,
-                scales=self.scale,
-                shear=self.shear,
-            )
 
             # -----------------------------------------------------------------
             # CopyPaste: https://arxiv.org/abs/2012.07177

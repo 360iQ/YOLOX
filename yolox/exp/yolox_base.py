@@ -144,9 +144,6 @@ class Exp(BaseExp):
             json_file=self.train_ann,
             img_size=self.input_size,
             preproc=TrainTransform(
-                max_labels=50,
-                flip_prob=self.flip_prob,
-                hsv_prob=self.hsv_prob
             ),
             cache=cache,
             cache_type=cache_type,
@@ -184,10 +181,7 @@ class Exp(BaseExp):
             dataset=self.dataset,
             mosaic=not no_aug,
             img_size=self.input_size,
-            preproc=TrainTransform(
-                max_labels=120,
-                flip_prob=self.flip_prob,
-                hsv_prob=self.hsv_prob),
+            preproc=TrainTransform(),
             degrees=self.degrees,
             translate=self.translate,
             mosaic_scale=self.mosaic_scale,

@@ -28,10 +28,7 @@ class Exp(MyExp):
             data_dir=os.path.join(get_yolox_datadir(), "VOCdevkit"),
             image_sets=[('2007', 'trainval'), ('2012', 'trainval')],
             img_size=self.input_size,
-            preproc=TrainTransform(
-                max_labels=50,
-                flip_prob=self.flip_prob,
-                hsv_prob=self.hsv_prob),
+            preproc=TrainTransform(),
             cache=cache,
             cache_type=cache_type,
         )
