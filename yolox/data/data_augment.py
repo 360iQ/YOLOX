@@ -1,24 +1,17 @@
-#!/usr/bin/env python3
-# -*- coding:utf-8 -*-
-# Copyright (c) Megvii, Inc. and its affiliates.
 """
 Data augmentation functionality. Passed as callable transformations to
-Dataset classes.
-
-The data augmentation procedures were interpreted from @weiliu89's SSD paper
-http://arxiv.org/abs/1512.02325
+Dataset classes. Uses Albumentations library for image transformations.
 """
-import albumentations as A
-import math
-import random
-
 import cv2
 import numpy as np
 
-from yolox.utils import xyxy2cxcywh, cxcywh2xyxy
+from yolox.utils import xyxy2cxcywh
+
+import albumentations as A
+from typing import Callable
 
 
-def get_augmentation_360():
+def get_augmentation_360() -> Callable:
     """Return a preset of augmentations for 360 images."""
     return A.Compose(
         [
@@ -61,10 +54,10 @@ def get_augmentation_360():
                 A.Sharpen(alpha=(0.1, 0.4), p=1.0),
             ], p=0.5
             ),
-        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3, label_fields=['class_labels']))
+        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3))
 
 
-def get_augmentation_default():
+def get_augmentation_default() -> Callable:
     """Return a default preset of augmentations for all images."""
     return A.Compose(
         [
@@ -73,10 +66,10 @@ def get_augmentation_default():
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.ColorJitter(hue=0.1, saturation=(0.5, 1.5), brightness=(0.5, 1.5), contrast=0.0, p=1.0),
-        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3, label_fields=['class_labels']))
+        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3, label_fields=['labels']))
 
 
-def get_augmentation_bullet():
+def get_augmentation_bullet() -> Callable:
     """Return a preset of augmentations for bullet images."""
     return A.Compose(
         [
@@ -117,7 +110,7 @@ def get_augmentation_bullet():
                 A.Sharpen(alpha=(0.1, 0.4), p=1.0),
             ], p=0.5
             ),
-        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3, label_fields=['class_labels']))
+        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3))
 
 
 AUGMENTATION_PRESETS = {
@@ -128,6 +121,15 @@ AUGMENTATION_PRESETS = {
 
 
 def preproc(img, input_size, swap=(2, 0, 1)):
+    """
+    Preprocess image. Resize to input_size with padding (if necessary) to preserve the aspect ratio and swap axes.
+    Return resized image and resize ratio - the ratio of the input_size to the original image size.
+
+    :param img: Image to preprocess.
+    :param input_size: Input size of the network.
+    :param swap: Axes to swap. Default is (2, 0, 1) for (channel, height, width) from (height, width, channel).
+    :return: Preprocessed image and resize ratio.
+    """
     if len(img.shape) == 3:
         padded_img = np.ones((input_size[0], input_size[1], 3), dtype=np.uint8) * 114
     else:
@@ -147,69 +149,76 @@ def preproc(img, input_size, swap=(2, 0, 1)):
 
 
 class TrainTransform:
-    def __init__(self, albumentations_pipeline=get_augmentation_default):
-        self.albumentations_pipeline = albumentations_pipeline()
-        self.max_labels = 50
+    """Applies the augmentations to the image and targets."""
+    def __init__(self, max_labels: int = 50, augmentation_pipeline: str = "default") -> None:
+        """
+        Initializes the TrainTransform object.
 
-    def __call__(self, image, targets, input_dim):
+        :param max_labels: Maximum number of labels per image. If the number of labels is less than this number, the
+        remaining labels are padded with zeros. If the number of labels is greater than this number, the labels are
+        truncated.
+        :param augmentation_pipeline: Augmentation pipeline to apply. Name of the pipeline in AUGMENTATION_PRESETS.
+        """
+        self.max_labels = max_labels
+        self.augmentation_pipeline = AUGMENTATION_PRESETS.get(augmentation_pipeline) if (
+                augmentation_pipeline in AUGMENTATION_PRESETS) else None
+
+    def __call__(self, image: np.ndarray, targets: np.ndarray, input_dim: tuple[int, int]) -> tuple[
+                                                                                              np.ndarray, np.ndarray]:
+        """
+        Applies the transformations to the image and targets. First, the bounding boxes in TLBR (x1, y1, x2, y2) format
+        are filtered to remove boxes with width or height less than 1. Then, the image is passed through the
+        augmentation pipeline. Then, the image is resized to the input dimension of the network with padding (if
+        necessary) to preserve the aspect ratio and swapped axes (channel, height, width). Finally, bounding boxes are
+        converted to (class number, center x, center y, width, height) format and padded with zeros to the maximum
+        number of labels. See tests/data/data_augment.py for examples.
+
+        :param image: Image to augment.
+        :param targets: Bounding boxes of the image as a numpy array. Shape (num_boxes, 5), where 5 is (x1, y1, x2, y2,
+        class_id).
+        :param input_dim: Input dimension of the network.
+
+        :return: Augmented image and padded bounding boxes. Shape (3, input_dim, input_dim) and (max_labels, 5) in
+        (class number, center x, center y, width, height) format.
+        """
+        boxes = targets[:, :4].copy()
+        labels = targets[:, 4].copy()
+
+        mask_b = np.minimum(xyxy2cxcywh(boxes.copy())[:, 2], xyxy2cxcywh(boxes.copy())[:, 3]) > 1
+        boxes = boxes[mask_b]
+        labels = labels[mask_b]
+
         height, width, _ = image.shape
-        boxes = targets[:, :4]
-        labels = targets[:, 4]
 
-        mask = np.minimum(xyxy2cxcywh(boxes.copy())[:, 2], xyxy2cxcywh(boxes.copy())[:, 3]) > 1
-        boxes = boxes[mask]
-        labels = labels[mask]
+        result = self.augmentation_pipeline(image=image, bboxes=boxes, labels=labels)
+        image = result['image']
+        boxes = np.array([list(box) for box in result['bboxes']])
+        labels = np.expand_dims(result['labels'], 1)
 
-        if len(boxes) == 0:
-            image = self.albumentations_pipeline(image=image)['image']
-            image, _ = preproc(image, input_dim)
-            return image, np.zeros((self.max_labels, 5))
-
-        augmentation_result = self.albumentations_pipeline(image=image, bboxes=boxes.tolist(),
-                                                           class_labels=labels.tolist())
-        image = augmentation_result['image']
-
-        boxes = xyxy2cxcywh(np.array(augmentation_result['bboxes']))
-        labels = np.array(augmentation_result['class_labels'])
-        labels = np.expand_dims(labels, 1)
-
-        image, r_ = preproc(image, input_dim)
+        image_t, r_ = preproc(image, input_dim)
+        boxes = xyxy2cxcywh(boxes) if len(boxes) > 0 else np.zeros((0, 4))
         boxes *= r_
 
         targets_t = np.hstack((labels, boxes))
-
         padded_labels = np.zeros((self.max_labels, 5))
-        padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[
-            : self.max_labels
-        ]
+        padded_labels[range(len(targets_t))[:self.max_labels]] = targets_t[:self.max_labels]
         padded_labels = np.ascontiguousarray(padded_labels, dtype=np.float32)
-        return image, padded_labels
+        return image_t, padded_labels
 
 
 class ValTransform:
     """
-    Defines the transformations that should be applied to test PIL image
-    for input into the network
-
-    dimension -> tensorize -> color adj
-
-    Arguments:
-        resize (int): input dimension to SSD
-        rgb_means ((int,int,int)): average RGB of the dataset
-            (104,117,123)
-        swap ((int,int,int)): final order of channels
-
-    Returns:
-        transform (transform) : callable transform to be applied to test/val
-        data
+    Applies the transformations to the image. First, the image is resized to the input dimension of the network with
+    padding (if necessary) to preserve the aspect ratio and swapped axes (channel, height, width). Bounding boxes are
+    not considered in this transformation. TODO: check if this is correct.
     """
-
-    def __init__(self, swap=(2, 0, 1), legacy=False):
+    def __init__(self, swap: tuple[int, int, int] = (2, 0, 1), legacy: bool = False) -> None:
         self.swap = swap
         self.legacy = legacy
 
     # assume input is cv2 img for now
-    def __call__(self, img, res, input_size):
+    def __call__(self, img: np.ndarray, res: np.ndarray,
+                 input_size: tuple[int, int] = (416, 416)) -> tuple[np.ndarray, np.ndarray]:
         img, _ = preproc(img, input_size, self.swap)
         if self.legacy:
             img = img[::-1, :, :].copy()
