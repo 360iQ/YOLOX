@@ -2,6 +2,9 @@
 Data augmentation functionality. Passed as callable transformations to
 Dataset classes. Uses Albumentations library for image transformations.
 """
+import math
+import random
+
 import cv2
 import numpy as np
 
@@ -16,14 +19,12 @@ def get_augmentation_360() -> Callable:
     return A.Compose(
         [
             # Geometrical transformations
-            A.PadIfNeeded(min_height=800, min_width=800, border_mode=cv2.BORDER_CONSTANT, always_apply=True),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Transpose(p=0.5),
             A.OpticalDistortion(p=0.5),
             A.RandomRotate90(p=1.0),
-            A.CenterCrop(height=800, width=800, p=0.3),
-            A.Affine(scale=(0.6, 2.0), translate_percent=(-0.5, 0.5), rotate=(-15, 15), shear=(-8, 8), cval=0,
+            A.Affine(scale=(1.0, 1.0), translate_percent=(-0.2, 0.2), rotate=(-15, 15), shear=(-3, 3), cval=0,
                      fit_output=False, keep_ratio=False, p=0.3),
             # Color transformations
             A.SomeOf(
@@ -40,10 +41,10 @@ def get_augmentation_360() -> Callable:
             # Noise transformations
             A.OneOf(
                 [
-                    A.Downscale(scale_min=0.5, scale_max=0.9, p=1.0),
-                    A.ImageCompression(quality_lower=50, quality_upper=100, p=1.0),
+                    A.Downscale(scale_min=0.8, scale_max=0.9, p=1.0),
+                    A.ImageCompression(quality_lower=80, quality_upper=100, p=1.0),
                     A.ISONoise(p=1.0),
-                    A.MultiplicativeNoise(multiplier=(0.5, 1.5), per_channel=True, p=1.0),
+                    A.MultiplicativeNoise(multiplier=(0.8, 1.1), per_channel=True, p=1.0),
                     A.GaussNoise(p=1.0),
                 ], p=0.5),
             # Blur/sharpen transformations
@@ -54,19 +55,16 @@ def get_augmentation_360() -> Callable:
                 A.Sharpen(alpha=(0.1, 0.4), p=1.0),
             ], p=0.5
             ),
-        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3))
+        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.2, label_fields=['labels']))
 
 
 def get_augmentation_default() -> Callable:
     """Return a default preset of augmentations for all images."""
     return A.Compose(
         [
-            A.PadIfNeeded(min_height=800, min_width=800, border_mode=cv2.BORDER_CONSTANT, always_apply=True),
-            A.RandomScale(scale_limit=(0.4, 0.4), interpolation=cv2.INTER_LINEAR, p=1.0),
             A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            A.ColorJitter(hue=0.1, saturation=(0.5, 1.5), brightness=(0.5, 1.5), contrast=0.0, p=1.0),
-        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3, label_fields=['labels']))
+            A.HueSaturationValue(p=1.0),
+        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.2, label_fields=['labels']))
 
 
 def get_augmentation_bullet() -> Callable:
@@ -74,7 +72,6 @@ def get_augmentation_bullet() -> Callable:
     return A.Compose(
         [
             # Geometrical transformations
-            A.PadIfNeeded(min_height=1280, min_width=1280, border_mode=cv2.BORDER_CONSTANT, always_apply=True),
             A.HorizontalFlip(p=0.5),
             A.OpticalDistortion(p=0.5),
             A.Rotate(limit=(-10, 10), border_mode=cv2.BORDER_CONSTANT, p=0.5),
@@ -110,7 +107,7 @@ def get_augmentation_bullet() -> Callable:
                 A.Sharpen(alpha=(0.1, 0.4), p=1.0),
             ], p=0.5
             ),
-        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.3))
+        ], bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.1, label_fields=['labels']))
 
 
 AUGMENTATION_PRESETS = {
@@ -119,6 +116,102 @@ AUGMENTATION_PRESETS = {
     'bullet': get_augmentation_bullet()
 }
 
+def apply_affine_to_bboxes(targets, target_size, M, scale):
+    num_gts = len(targets)
+
+    # warp corner points
+    twidth, theight = target_size
+    corner_points = np.ones((4 * num_gts, 3))
+    corner_points[:, :2] = targets[:, [0, 1, 2, 3, 0, 3, 2, 1]].reshape(
+        4 * num_gts, 2
+    )  # x1y1, x2y2, x1y2, x2y1
+    corner_points = corner_points @ M.T  # apply affine transform
+    corner_points = corner_points.reshape(num_gts, 8)
+
+    # create new boxes
+    corner_xs = corner_points[:, 0::2]
+    corner_ys = corner_points[:, 1::2]
+    new_bboxes = (
+        np.concatenate(
+            (corner_xs.min(1), corner_ys.min(1), corner_xs.max(1), corner_ys.max(1))
+        )
+        .reshape(4, num_gts)
+        .T
+    )
+
+    # clip boxes
+    new_bboxes[:, 0::2] = new_bboxes[:, 0::2].clip(0, twidth)
+    new_bboxes[:, 1::2] = new_bboxes[:, 1::2].clip(0, theight)
+
+    targets[:, :4] = new_bboxes
+
+    return targets
+
+def get_aug_params(value, center=0):
+    if isinstance(value, float):
+        return random.uniform(center - value, center + value)
+    elif len(value) == 2:
+        return random.uniform(value[0], value[1])
+    else:
+        raise ValueError(
+            "Affine params should be either a sequence containing two values\
+             or single float values. Got {}".format(value)
+        )
+
+
+def get_affine_matrix(
+    target_size,
+    degrees=10,
+    translate=0.1,
+    scales=0.1,
+    shear=10,
+):
+    twidth, theight = target_size
+
+    # Rotation and Scale
+    angle = get_aug_params(degrees)
+    scale = get_aug_params(scales, center=1.0)
+
+    if scale <= 0.0:
+        raise ValueError("Argument scale should be positive")
+
+    R = cv2.getRotationMatrix2D(angle=angle, center=(0, 0), scale=scale)
+
+    M = np.ones([2, 3])
+    # Shear
+    shear_x = math.tan(get_aug_params(shear) * math.pi / 180)
+    shear_y = math.tan(get_aug_params(shear) * math.pi / 180)
+
+    M[0] = R[0] + shear_y * R[1]
+    M[1] = R[1] + shear_x * R[0]
+
+    # Translation
+    translation_x = get_aug_params(translate) * twidth  # x translation (pixels)
+    translation_y = get_aug_params(translate) * theight  # y translation (pixels)
+
+    M[0, 2] = translation_x
+    M[1, 2] = translation_y
+
+    return M, scale
+
+def random_affine(
+    img,
+    targets=(),
+    target_size=(640, 640),
+    degrees=10,
+    translate=0.1,
+    scales=0.1,
+    shear=10,
+):
+    M, scale = get_affine_matrix(target_size, degrees, translate, scales, shear)
+
+    img = cv2.warpAffine(img, M, dsize=target_size, borderValue=(114, 114, 114))
+
+    # Transform label coordinates
+    if len(targets) > 0:
+        targets = apply_affine_to_bboxes(targets, target_size, M, scale)
+
+    return img, targets
 
 def preproc(img, input_size, swap=(2, 0, 1)):
     """
@@ -150,7 +243,7 @@ def preproc(img, input_size, swap=(2, 0, 1)):
 
 class TrainTransform:
     """Applies the augmentations to the image and targets."""
-    def __init__(self, max_labels: int = 50, augmentation_pipeline: str = "default") -> None:
+    def __init__(self, max_labels: int = 50, augmentation_pipeline: str = "360") -> None:
         """
         Initializes the TrainTransform object.
 
@@ -194,6 +287,7 @@ class TrainTransform:
         image = result['image']
         boxes = np.array([list(box) for box in result['bboxes']])
         labels = np.expand_dims(result['labels'], 1)
+        # labels = np.expand_dims(labels, 1)
 
         image_t, r_ = preproc(image, input_dim)
         boxes = xyxy2cxcywh(boxes) if len(boxes) > 0 else np.zeros((0, 4))

@@ -51,10 +51,6 @@ class Exp(BaseExp):
         self.mosaic_prob = 1.0
         # prob of applying mixup aug
         self.mixup_prob = 1.0
-        # prob of applying hsv aug
-        self.hsv_prob = 1.0
-        # prob of applying flip aug
-        self.flip_prob = 0.5
         # rotation angle range, for example, if set to 2, the true range is (-2, 2)
         self.degrees = 10.0
         # translate range, for example, if set to 0.1, the true range is (-0.1, 0.1)
@@ -65,6 +61,8 @@ class Exp(BaseExp):
         self.mixup_scale = (0.5, 1.5)
         # shear angle range, for example, if set to 2, the true range is (-2, 2)
         self.shear = 2.0
+        #augmentation preset
+        self.augmentation_preset = "default"
 
         # --------------  training config --------------------- #
         # epoch number used for warmup
@@ -144,6 +142,7 @@ class Exp(BaseExp):
             json_file=self.train_ann,
             img_size=self.input_size,
             preproc=TrainTransform(
+                augmentation_pipeline=self.augmentation_preset
             ),
             cache=cache,
             cache_type=cache_type,
