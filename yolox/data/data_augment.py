@@ -243,7 +243,7 @@ def preproc(img, input_size, swap=(2, 0, 1)):
 
 class TrainTransform:
     """Applies the augmentations to the image and targets."""
-    def __init__(self, max_labels: int = 50, augmentation_pipeline: str = "360") -> None:
+    def __init__(self, max_labels: int = 50, augmentation_pipeline: str = "default") -> None:
         """
         Initializes the TrainTransform object.
 
@@ -287,7 +287,6 @@ class TrainTransform:
         image = result['image']
         boxes = np.array([list(box) for box in result['bboxes']])
         labels = np.expand_dims(result['labels'], 1)
-        # labels = np.expand_dims(labels, 1)
 
         image_t, r_ = preproc(image, input_dim)
         boxes = xyxy2cxcywh(boxes) if len(boxes) > 0 else np.zeros((0, 4))

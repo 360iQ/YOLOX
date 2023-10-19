@@ -180,7 +180,9 @@ class Exp(BaseExp):
             dataset=self.dataset,
             mosaic=not no_aug,
             img_size=self.input_size,
-            preproc=TrainTransform(),
+            preproc=TrainTransform(
+                augmentation_pipeline=self.augmentation_preset
+            ),
             degrees=self.degrees,
             translate=self.translate,
             mosaic_scale=self.mosaic_scale,

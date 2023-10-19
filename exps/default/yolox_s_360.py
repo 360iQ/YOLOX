@@ -13,11 +13,11 @@ class Exp(MyExp):
         self.num_classes = 1
         self.max_epoch = 200
         self.data_num_workers = 4
-        self.eval_interval = 1
+        self.eval_interval = 3
         self.test_size = (640, 640)
         self.input_size = (640, 640)
         self.multiscale_range = 1
-        self.augmentation_preset = "360"
+        self.augmentation_preset = "default"
 
         self.data_dir = r"N:\_temp\SoS2.6_NDS_extended2"
         self.train_ann = r"N:\_temp\SoS2.6_NDS_extended2\annotations\instances_train2017.json"
