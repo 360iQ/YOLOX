@@ -231,7 +231,6 @@ class TrainTransform:
         if self.sun_glare is not None:
             image = augment_sun_glare(image, self.sun_glare)
 
-
         image_t, boxes = _mirror(image, boxes, self.flip_prob)
         height, width, _ = image_t.shape
         image_t, r_ = preproc(image_t, input_dim)
