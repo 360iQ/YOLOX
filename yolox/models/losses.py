@@ -52,7 +52,7 @@ class IOUloss(nn.Module):
         elif self.loss_type == "giou":
             c_tl, c_br = get_smallest_enclosing_box(pred, target)
             area_c = torch.prod(c_br - c_tl, 1)
-            giou = iou - (area_c - area_union) / area_c.clamp(1e-16)
+            giou = iou - torch.abs(area_c - area_union) / area_c.clamp(1e-16)
             loss = 1 - giou.clamp(min=-1.0, max=1.0)
         else:
             raise NotImplementedError(f"Loss type {self.loss_type} not implemented.")
