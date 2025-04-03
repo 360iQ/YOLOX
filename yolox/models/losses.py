@@ -54,6 +54,22 @@ class IOUloss(nn.Module):
             area_c = torch.prod(c_br - c_tl, 1)
             giou = iou - torch.abs(area_c - area_union) / area_c.clamp(1e-16)
             loss = 1 - giou.clamp(min=-1.0, max=1.0)
+
+        elif self.loss_type == "ciou":
+            c_tl, c_br = get_smallest_enclosing_box(pred, target)
+            c2 = torch.pow(c_br - c_tl, 2).sum(dim=1).clamp(min=1e-16)  # diagonal length squared
+            rho2 = torch.pow(pred[:, :2] - target[:, :2], 2).sum(dim=1)  # center distance squared
+
+            # Calculate v - aspect ratio consistency
+            w1, h1 = pred[:, 2], pred[:, 3]
+            w2, h2 = target[:, 2], target[:, 3]
+            v = (4 / (torch.pi ** 2)) * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)
+
+            with torch.no_grad():
+                alpha = v / (1 - iou + v).clamp(min=1e-16)
+
+            ciou = iou - (rho2 / c2 + alpha * v)
+            loss = 1 - ciou.clamp(min=-1.0, max=1.0)
         else:
             raise NotImplementedError(f"Loss type {self.loss_type} not implemented.")
 
