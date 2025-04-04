@@ -61,14 +61,14 @@ class IOUloss(nn.Module):
             rho2 = torch.pow(pred[:, :2] - target[:, :2], 2).sum(dim=1)  # center distance squared
 
             # Calculate v - aspect ratio consistency
-            w1, h1 = pred[:, 2], pred[:, 3]
-            w2, h2 = target[:, 2], target[:, 3]
+            w1, h1 = pred[:, 2].clamp(min=1e-7), pred[:, 3].clamp(min=1e-7)
+            w2, h2 = target[:, 2].clamp(min=1e-7), target[:, 3].clamp(min=1e-7)
             v = ((4 / (torch.pi ** 2)) * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)).clamp(min=0.0, max=1.0)
 
             with torch.no_grad():
-                alpha = (v / ((1 - iou + v).clamp(min=1e-16))).clamp(min=0.0, max=1.0)
+                alpha = (v / ((1 - iou + v).clamp(min=1e-7))).clamp(min=0.0, max=1.0)
 
-            ciou = (iou - (rho2 / c2 + alpha * v)).clamp(min=-1.0, max=1.0)
+            ciou = (iou - (rho2 / c2 + alpha * v))
             loss = 1 - ciou.clamp(min=-1.0, max=1.0)
         else:
             raise NotImplementedError(f"Loss type {self.loss_type} not implemented.")
