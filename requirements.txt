@@ -1,4 +1,4 @@
-albumentations~=2.0.5
+albumentations~=1.4.24
 loguru==0.7.0
 matplotlib==3.6.3
 ninja==1.11.1
