@@ -114,6 +114,7 @@ class Exp(BaseExp):
         self.nmsthre = 0.65
         # freeze model backbone weights
         self.freeze_backbone = False
+        self.single_image_transforms = None
 
     def get_model(self):
         from yolox.models import YOLOX, YOLOPAFPN, YOLOXHead
@@ -210,6 +211,7 @@ class Exp(BaseExp):
             enable_mixup=self.enable_mixup,
             mosaic_prob=self.mosaic_prob,
             mixup_prob=self.mixup_prob,
+            single_image_transforms=self.single_image_transforms,
         )
 
         if is_distributed:
