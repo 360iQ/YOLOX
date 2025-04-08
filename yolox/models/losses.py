@@ -50,12 +50,22 @@ class IOUloss(nn.Module):
             loss = 1 - iou ** 2
 
         elif self.loss_type == "giou":
+            """
+            Compute the generalized IoU loss.
+            
+            Implementation based on the paper: https://arxiv.org/pdf/1911.08287
+            """
             c_tl, c_br = get_smallest_enclosing_box(pred, target)
             area_c = torch.prod(c_br - c_tl, 1)
             giou = iou - torch.abs(area_c - area_union) / area_c.clamp(1e-16)
             loss = 1 - giou.clamp(min=-1.0, max=1.0)
 
         elif self.loss_type == "ciou":
+            """
+            Compute the complete IoU loss.
+            
+            Implementation based on the paper: https://arxiv.org/pdf/1911.08287
+            """
             c_tl, c_br = get_smallest_enclosing_box(pred, target)
             c2 = torch.pow(c_br - c_tl, 2).sum(dim=1).clamp(min=1e-16)  # diagonal length squared
             rho2 = torch.pow(pred[:, :2] - target[:, :2], 2).sum(dim=1)  # center distance squared
