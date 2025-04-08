@@ -25,6 +25,9 @@ class TestIOULoss(unittest.TestCase):
     def test_giou_loss(self):
         self._test_loss(IOUloss(loss_type='giou'), torch.tensor([0.9026, 0.5, 0.5, 1.5]))
 
+    def test_ciou_loss(self):
+        self._test_loss(IOUloss(loss_type="ciou"), torch.tensor([0.8512, 0.5345, 0.5345, 1.2500]))
+
     def test_get_smallest_enclosing_box(self):
         bboxes1 = torch.tensor([[1, 1, 1, 1], [0, 0, 1, 1]])
         bboxes2 = torch.tensor([[1, 1, 1, 1], [1, 1, 1, 1]])
@@ -32,4 +35,3 @@ class TestIOULoss(unittest.TestCase):
         values = get_smallest_enclosing_box(bboxes1, bboxes2)
         for value, gt_value in zip(values, gt_values):
             assert (value == gt_value).all(), f"{value} != {gt_value}"
-
