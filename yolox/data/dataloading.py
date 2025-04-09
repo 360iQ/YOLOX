@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from torch.utils.data.dataloader import DataLoader as torchDataLoader
 from torch.utils.data.dataloader import default_collate
+from yolox.exp.base_exp import SEED
 
 from .samplers import YoloBatchSampler
 
@@ -107,7 +108,7 @@ def list_collate(batch):
 
 
 def worker_init_reset_seed(worker_id):
-    seed = uuid.uuid4().int % 2**32
+    seed = SEED
     random.seed(seed)
     torch.set_rng_state(torch.manual_seed(seed).get_state())
     np.random.seed(seed)

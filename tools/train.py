@@ -104,17 +104,21 @@ def main(update_callback, exp: Exp, args):
     if exp.seed is not None:
         random.seed(exp.seed)
         torch.manual_seed(exp.seed)
+        torch.cuda.manual_seed(exp.seed)
         cudnn.deterministic = True
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
         warnings.warn(
             "You have chosen to seed training. This will turn on the CUDNN deterministic setting, "
             "which can slow down your training considerably! You may see unexpected behavior "
             "when restarting from checkpoints."
         )
+    else:
+        cudnn.benchmark = True
 
     # set environment variables for distributed training
     configure_nccl()
     configure_omp()
-    cudnn.benchmark = True
 
     trainer = exp.get_trainer(args)
     trainer.train(update_callback)
