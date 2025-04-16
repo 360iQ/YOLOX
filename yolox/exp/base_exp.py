@@ -12,12 +12,13 @@ from torch.nn import Module
 
 from yolox.utils import LRScheduler
 
+SEED = 42
 
 class BaseExp(metaclass=ABCMeta):
     """Basic class for any experiment."""
 
     def __init__(self):
-        self.seed = None
+        self.seed = SEED
         self.output_dir = "./YOLOX_outputs"
         self.print_interval = 100
         self.eval_interval = 10

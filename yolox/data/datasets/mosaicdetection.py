@@ -41,7 +41,7 @@ class MosaicDetection(Dataset):
         self, dataset, img_size, mosaic=True, preproc=None,
         degrees=10.0, translate=0.1, mosaic_scale=(0.5, 1.5),
         mixup_scale=(0.5, 1.5), shear=2.0, enable_mixup=True,
-        mosaic_prob=1.0, mixup_prob=1.0, *args
+        mosaic_prob=1.0, mixup_prob=1.0, single_image_transforms=None, *args
     ):
         """
 
@@ -70,6 +70,7 @@ class MosaicDetection(Dataset):
         self.enable_mixup = enable_mixup
         self.mosaic_prob = mosaic_prob
         self.mixup_prob = mixup_prob
+        self.single_image_transforms = single_image_transforms
         self.local_rank = get_local_rank()
 
     def __len__(self):
@@ -91,6 +92,7 @@ class MosaicDetection(Dataset):
 
             for i_mosaic, index in enumerate(indices):
                 img, _labels, _, img_id = self._dataset.pull_item(index)
+                img = self.single_image_transforms(image=img)["image"] if self.single_image_transforms else img
                 h0, w0 = img.shape[:2]  # orig hw
                 scale = min(1. * input_h / h0, 1. * input_w / w0)
                 img = cv2.resize(
@@ -156,6 +158,7 @@ class MosaicDetection(Dataset):
         else:
             self._dataset._input_dim = self.input_dim
             img, label, img_info, img_id = self._dataset.pull_item(idx)
+            img = self.single_image_transforms(image=img)["image"] if self.single_image_transforms else img
             img, label = self.preproc(img, label, self.input_dim)
             return img, label, img_info, img_id
 
