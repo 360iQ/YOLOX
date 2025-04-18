@@ -92,6 +92,7 @@ class COCOEvaluator:
         testdev: bool = False,
         per_class_AP: bool = True,
         per_class_AR: bool = True,
+        class_agnostic_nms: bool = False,
     ):
         """
         Args:
@@ -112,6 +113,7 @@ class COCOEvaluator:
         self.testdev = testdev
         self.per_class_AP = per_class_AP
         self.per_class_AR = per_class_AR
+        self.class_agnostic_nms = class_agnostic_nms
 
     def evaluate(
         self, model, distributed=False, half=False, trt_file=None,
@@ -175,7 +177,7 @@ class COCOEvaluator:
                     inference_time += infer_end - start
 
                 outputs = postprocess(
-                    outputs, self.num_classes, self.confthre, self.nmsthre
+                    outputs, self.num_classes, self.confthre, self.nmsthre, self.class_agnostic_nms
                 )
                 if is_time_record:
                     nms_end = time_synchronized()
