@@ -115,6 +115,7 @@ class Exp(BaseExp):
         # freeze model backbone weights
         self.freeze_backbone = False
         self.single_image_transforms = None
+        self.class_agnostic_nms_valid = False
 
     def get_model(self):
         from yolox.models import YOLOX, YOLOPAFPN, YOLOXHead
@@ -357,6 +358,7 @@ class Exp(BaseExp):
             nmsthre=self.nmsthre,
             num_classes=self.num_classes,
             testdev=testdev,
+            class_agnostic_nms=self.class_agnostic_nms_valid,
         )
 
     def get_trainer(self, args):
