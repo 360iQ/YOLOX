@@ -144,6 +144,71 @@ class SPPBottleneck(nn.Module):
         return x
 
 
+class ASPPBottleneck(nn.Module):
+    """Atrous Spatial Pyramid Pooling layer"""
+
+    def __init__(
+            self, in_channels, out_channels, dilation_rates=(6, 12, 18), activation="silu"
+    ):
+        super().__init__()
+        hidden_channels = in_channels // 2
+        self.conv1 = BaseConv(in_channels, hidden_channels, 1, stride=1, act=activation)
+
+        # Regular 1x1 convolution branch
+        self.branch1 = BaseConv(hidden_channels, hidden_channels, 1, stride=1, act=activation)
+
+        # Atrous convolution branches
+        self.branches = nn.ModuleList()
+        for rate in dilation_rates:
+            # For each dilation rate, create a dilated 3x3 convolution
+            padding = rate  # padding = dilation for 3x3 kernel to maintain spatial dims
+            self.branches.append(
+                nn.Sequential(
+                    nn.Conv2d(
+                        hidden_channels,
+                        hidden_channels,
+                        kernel_size=3,
+                        stride=1,
+                        padding=padding,
+                        dilation=rate,
+                        bias=False
+                    ),
+                    nn.BatchNorm2d(hidden_channels),
+                    get_activation(activation, inplace=True)
+                )
+            )
+
+        # Global context branch
+        self.global_branch = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            BaseConv(hidden_channels, hidden_channels, 1, stride=1, act=activation)
+        )
+
+        # Output layer (+2 for 1x1 branch and global context)
+        conv2_channels = hidden_channels * (len(dilation_rates) + 2)
+        self.conv2 = BaseConv(conv2_channels, out_channels, 1, stride=1, act=activation)
+
+    def forward(self, x):
+        x = self.conv1(x)
+
+        # Regular branch
+        x1 = self.branch1(x)
+
+        # Atrous branches
+        atrous_branches = [branch(x) for branch in self.branches]
+
+        # Global context branch
+        global_features = self.global_branch(x)
+        global_features = nn.functional.interpolate(
+            global_features, size=x.shape[2:], mode='bilinear', align_corners=False
+        )
+
+        # Concatenate all features
+        x = torch.cat([x1] + atrous_branches + [global_features], dim=1)
+        x = self.conv2(x)
+        return x
+
+
 class CSPLayer(nn.Module):
     """C3 in yolov5, CSP Bottleneck with 3 convolutions"""
 
