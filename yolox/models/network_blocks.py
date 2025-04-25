@@ -276,20 +276,26 @@ class Focus(nn.Module):
 
 
 class CBAM(nn.Module):
+    """
+    Convolutional Block Attention Module (CBAM)
+    As described in "CBAM: Convolutional Block Attention Module" and
+    "Improved YOLOX Foreign Object Detection Algorithm for Transmission Lines"
+    """
     def __init__(self, channel, reduction=16):
         super().__init__()
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        # Channel attention components
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
 
-        # Channel attention
-        self.channel_attention = nn.Sequential(
+        # Shared MLP for channel attention
+        self.mlp = nn.Sequential(
             nn.Linear(channel, channel // reduction, bias=False),
             nn.ReLU(inplace=True),
             nn.Linear(channel // reduction, channel, bias=False)
         )
 
-        # Spatial attention
-        self.spatial_attention = nn.Sequential(
+        # Spatial attention components
+        self.conv_spatial = nn.Sequential(
             nn.Conv2d(2, 1, kernel_size=7, padding=3, bias=False),
             nn.BatchNorm2d(1),
             nn.Sigmoid()
@@ -298,26 +304,28 @@ class CBAM(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        # Channel attention
-        max_out = self.max_pool(x)
-        avg_out = self.avg_pool(x)
-        max_out = max_out.view(max_out.size(0), -1)
-        avg_out = avg_out.view(avg_out.size(0), -1)
+        # ---------- Channel Attention ----------
+        # Apply average and max pooling
+        avg_out = self.mlp(self.avg_pool(x).view(x.size(0), -1))
+        max_out = self.mlp(self.max_pool(x).view(x.size(0), -1))
 
-        max_out = self.channel_attention(max_out)
-        avg_out = self.channel_attention(avg_out)
-        channel_out = max_out + avg_out
-        channel_out = self.sigmoid(channel_out).view(x.size(0), x.size(1), 1, 1)
+        # Combine and apply sigmoid
+        channel_attention = self.sigmoid(avg_out + max_out).view(x.size(0), x.size(1), 1, 1)
 
-        x = channel_out * x
+        # Apply channel attention
+        x_channel = x * channel_attention
 
-        # Spatial attention
-        max_out = torch.max(x, dim=1, keepdim=True)[0]
-        avg_out = torch.mean(x, dim=1, keepdim=True)
-        spatial_out = torch.cat([max_out, avg_out], dim=1)
-        spatial_out = self.spatial_attention(spatial_out)
+        # ---------- Spatial Attention ----------
+        # Generate spatial attention map
+        avg_spatial = torch.mean(x_channel, dim=1, keepdim=True)
+        max_spatial = torch.max(x_channel, dim=1, keepdim=True)[0]
+        spatial_features = torch.cat([avg_spatial, max_spatial], dim=1)
+        spatial_attention = self.conv_spatial(spatial_features)
 
-        return x * spatial_out
+        # Apply spatial attention (sequentially after channel attention)
+        x_refined = x_channel * spatial_attention
+
+        return x_refined
 
 class ConvCBAM(BaseConv):
     """Conv layer with CBAM attention"""
