@@ -273,3 +273,62 @@ class Focus(nn.Module):
             dim=1,
         )
         return self.conv(x)
+
+
+class CBAM(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super().__init__()
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+
+        # Channel attention
+        self.channel_attention = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False)
+        )
+
+        # Spatial attention
+        self.spatial_attention = nn.Sequential(
+            nn.Conv2d(2, 1, kernel_size=7, padding=3, bias=False),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid()
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        # Channel attention
+        max_out = self.max_pool(x)
+        avg_out = self.avg_pool(x)
+        max_out = max_out.view(max_out.size(0), -1)
+        avg_out = avg_out.view(avg_out.size(0), -1)
+
+        max_out = self.channel_attention(max_out)
+        avg_out = self.channel_attention(avg_out)
+        channel_out = max_out + avg_out
+        channel_out = self.sigmoid(channel_out).view(x.size(0), x.size(1), 1, 1)
+
+        x = channel_out * x
+
+        # Spatial attention
+        max_out = torch.max(x, dim=1, keepdim=True)[0]
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        spatial_out = torch.cat([max_out, avg_out], dim=1)
+        spatial_out = self.spatial_attention(spatial_out)
+
+        return x * spatial_out
+
+class ConvCBAM(BaseConv):
+    """Conv layer with CBAM attention"""
+    def __init__(
+        self, in_channels, out_channels, ksize, stride,
+        groups=1, bias=False, act="silu"
+    ):
+        super().__init__(in_channels, out_channels, ksize, stride, groups, bias, act)
+        self.cbam = CBAM(out_channels)
+
+    def forward(self, x):
+        x = super().forward(x)
+        return self.cbam(x)
+

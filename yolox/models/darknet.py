@@ -4,7 +4,7 @@
 
 from torch import nn
 
-from .network_blocks import BaseConv, CSPLayer, DWConv, Focus, ResLayer, SPPBottleneck, ASPPBottleneck
+from .network_blocks import BaseConv, CSPLayer, DWConv, Focus, ResLayer, SPPBottleneck, ASPPBottleneck, CBAM
 
 
 class Darknet(nn.Module):
@@ -136,6 +136,7 @@ class CSPDarknet(nn.Module):
                 depthwise=depthwise,
                 act=act,
             ),
+            CBAM(base_channels * 4),
         )
 
         # dark4
@@ -148,6 +149,7 @@ class CSPDarknet(nn.Module):
                 depthwise=depthwise,
                 act=act,
             ),
+            CBAM(base_channels * 8),
         )
 
         # dark5
@@ -163,6 +165,7 @@ class CSPDarknet(nn.Module):
                 depthwise=depthwise,
                 act=act,
             ),
+            CBAM(base_channels * 16),
         )
 
     def forward(self, x):
