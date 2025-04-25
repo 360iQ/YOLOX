@@ -148,7 +148,7 @@ class ASPPBottleneck(nn.Module):
     """Atrous Spatial Pyramid Pooling layer"""
 
     def __init__(
-            self, in_channels, out_channels, dilation_rates=(6, 12, 18), activation="silu"
+            self, in_channels, out_channels, dilation_rates=(6, 12, 18), activation="silu", dropout_rate=0.1
     ):
         super().__init__()
         hidden_channels = in_channels // 2
@@ -184,6 +184,9 @@ class ASPPBottleneck(nn.Module):
             BaseConv(hidden_channels, hidden_channels, 1, stride=1, act=activation)
         )
 
+        # Dropout layer to reduce overfitting
+        self.dropout = nn.Dropout2d(p=dropout_rate)
+
         # Output layer (+2 for 1x1 branch and global context)
         conv2_channels = hidden_channels * (len(dilation_rates) + 2)
         self.conv2 = BaseConv(conv2_channels, out_channels, 1, stride=1, act=activation)
@@ -205,6 +208,10 @@ class ASPPBottleneck(nn.Module):
 
         # Concatenate all features
         x = torch.cat([x1] + atrous_branches + [global_features], dim=1)
+
+        # Apply dropout
+        x = self.dropout(x)
+
         x = self.conv2(x)
         return x
 
