@@ -287,6 +287,8 @@ class CBAM(nn.Module):
     Convolutional Block Attention Module (CBAM)
     As described in "CBAM: Convolutional Block Attention Module" and
     "Improved YOLOX Foreign Object Detection Algorithm for Transmission Lines"
+    Main publication: https://onlinelibrary.wiley.com/doi/epdf/10.1155/2022/5835693
+    Block description: https://arxiv.org/pdf/1807.06521
     """
     def __init__(self, channel, reduction=16):
         super().__init__()
@@ -311,6 +313,9 @@ class CBAM(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
+        # Save the input for the residual connection
+        residual = x
+
         # ---------- Channel Attention ----------
         # Apply average and max pooling
         avg_out = self.mlp(self.avg_pool(x).view(x.size(0), -1))
@@ -332,18 +337,5 @@ class CBAM(nn.Module):
         # Apply spatial attention (sequentially after channel attention)
         x_refined = x_channel * spatial_attention
 
-        return x_refined
-
-class ConvCBAM(BaseConv):
-    """Conv layer with CBAM attention"""
-    def __init__(
-        self, in_channels, out_channels, ksize, stride,
-        groups=1, bias=False, act="silu"
-    ):
-        super().__init__(in_channels, out_channels, ksize, stride, groups, bias, act)
-        self.cbam = CBAM(out_channels)
-
-    def forward(self, x):
-        x = super().forward(x)
-        return self.cbam(x)
-
+        # Add the residual connection
+        return x_refined + residual
