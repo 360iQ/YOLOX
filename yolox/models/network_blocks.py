@@ -306,7 +306,6 @@ class CBAM(nn.Module):
         # Spatial attention components
         self.conv_spatial = nn.Sequential(
             nn.Conv2d(2, 1, kernel_size=7, padding=3, bias=False),
-            nn.BatchNorm2d(1),
             nn.Sigmoid()
         )
 
