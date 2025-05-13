@@ -145,7 +145,12 @@ class SPPBottleneck(nn.Module):
 
 
 class ASPPBottleneck(nn.Module):
-    """Atrous Spatial Pyramid Pooling layer"""
+    """
+    Atrous Spatial Pyramid Pooling layer
+
+    Main publication: https://onlinelibrary.wiley.com/doi/epdf/10.1155/2022/5835693
+    Can be added to darknet backbone to self.darknet5 instead of SPPBottleneck.
+    """
 
     def __init__(
             self, in_channels, out_channels, dilation_rates=(6, 12, 18), activation="silu", dropout_rate=0.1
@@ -289,6 +294,8 @@ class CBAM(nn.Module):
     "Improved YOLOX Foreign Object Detection Algorithm for Transmission Lines"
     Main publication: https://onlinelibrary.wiley.com/doi/epdf/10.1155/2022/5835693
     Block description: https://arxiv.org/pdf/1807.06521
+
+    an be added to darknet backbone to dark3 dark4 and dark5 with number of base channels like in CSPLayer.
     """
     def __init__(self, channel, reduction=16):
         super().__init__()
@@ -306,7 +313,6 @@ class CBAM(nn.Module):
         # Spatial attention components
         self.conv_spatial = nn.Sequential(
             nn.Conv2d(2, 1, kernel_size=7, padding=3, bias=False),
-            nn.BatchNorm2d(1),
             nn.Sigmoid()
         )
 
