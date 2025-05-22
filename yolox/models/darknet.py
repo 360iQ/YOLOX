@@ -4,7 +4,7 @@
 
 from torch import nn
 
-from .network_blocks import BaseConv, CSPLayer, DWConv, Focus, ResLayer, SPPBottleneck
+from .network_blocks import BaseConv, CSPLayer, DWConv, Focus, ResLayer, SPPBottleneck, C3VIT
 
 
 class Darknet(nn.Module):
@@ -102,12 +102,13 @@ class CSPDarknet(nn.Module):
         out_features=("dark3", "dark4", "dark5"),
         depthwise=False,
         act="silu",
+        vit=True,
     ):
         super().__init__()
         assert out_features, "please provide output features of Darknet"
         self.out_features = out_features
         Conv = DWConv if depthwise else BaseConv
-
+        self.vit = vit
         base_channels = int(wid_mul * 64)  # 64
         base_depth = max(round(dep_mul * 3), 1)  # 3
 
@@ -164,6 +165,30 @@ class CSPDarknet(nn.Module):
             ),
         )
 
+        if self.vit:
+            self.dark5TR = nn.Sequential(
+                Conv(base_channels * 8, base_channels * 16, 3, 2, act=act),
+                SPPBottleneck(base_channels * 16, base_channels * 16, activation=act),
+                C3VIT(
+                    base_channels * 16,
+                    base_channels * 16,
+                    n=base_depth,
+                ),
+            )
+        else:
+            self.dark5 = nn.Sequential(
+                Conv(base_channels * 8, base_channels * 16, 3, 2, act=act),
+                SPPBottleneck(base_channels * 16, base_channels * 16, activation=act),
+                CSPLayer(
+                    base_channels * 16,
+                    base_channels * 16,
+                    n=base_depth,
+                    shortcut=False,
+                    depthwise=depthwise,
+                    act=act,
+                ),
+            )
+
     def forward(self, x):
         outputs = {}
         x = self.stem(x)
@@ -174,6 +199,10 @@ class CSPDarknet(nn.Module):
         outputs["dark3"] = x
         x = self.dark4(x)
         outputs["dark4"] = x
-        x = self.dark5(x)
+
+        if self.vit:
+            x = self.dark5TR(x)
+        else:
+            x = self.dark5(x)
         outputs["dark5"] = x
         return {k: v for k, v in outputs.items() if k in self.out_features}
