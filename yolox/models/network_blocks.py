@@ -144,6 +144,83 @@ class SPPBottleneck(nn.Module):
         return x
 
 
+class ASPPBottleneck(nn.Module):
+    """
+    Atrous Spatial Pyramid Pooling layer
+
+    Main publication: https://onlinelibrary.wiley.com/doi/epdf/10.1155/2022/5835693
+    Can be added to darknet backbone to self.darknet5 instead of SPPBottleneck.
+    """
+
+    def __init__(
+            self, in_channels, out_channels, dilation_rates=(6, 12, 18), activation="silu", dropout_rate=0.1
+    ):
+        super().__init__()
+        hidden_channels = in_channels // 2
+        self.conv1 = BaseConv(in_channels, hidden_channels, 1, stride=1, act=activation)
+
+        # Regular 1x1 convolution branch
+        self.branch1 = BaseConv(hidden_channels, hidden_channels, 1, stride=1, act=activation)
+
+        # Atrous convolution branches
+        self.branches = nn.ModuleList()
+        for rate in dilation_rates:
+            # For each dilation rate, create a dilated 3x3 convolution
+            padding = rate  # padding = dilation for 3x3 kernel to maintain spatial dims
+            self.branches.append(
+                nn.Sequential(
+                    nn.Conv2d(
+                        hidden_channels,
+                        hidden_channels,
+                        kernel_size=3,
+                        stride=1,
+                        padding=padding,
+                        dilation=rate,
+                        bias=False
+                    ),
+                    nn.BatchNorm2d(hidden_channels),
+                    get_activation(activation, inplace=True)
+                )
+            )
+
+        # Global context branch
+        self.global_branch = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            BaseConv(hidden_channels, hidden_channels, 1, stride=1, act=activation)
+        )
+
+        # Dropout layer to reduce overfitting
+        self.dropout = nn.Dropout2d(p=dropout_rate)
+
+        # Output layer (+2 for 1x1 branch and global context)
+        conv2_channels = hidden_channels * (len(dilation_rates) + 2)
+        self.conv2 = BaseConv(conv2_channels, out_channels, 1, stride=1, act=activation)
+
+    def forward(self, x):
+        x = self.conv1(x)
+
+        # Regular branch
+        x1 = self.branch1(x)
+
+        # Atrous branches
+        atrous_branches = [branch(x) for branch in self.branches]
+
+        # Global context branch
+        global_features = self.global_branch(x)
+        global_features = nn.functional.interpolate(
+            global_features, size=x.shape[2:], mode='bilinear', align_corners=False
+        )
+
+        # Concatenate all features
+        x = torch.cat([x1] + atrous_branches + [global_features], dim=1)
+
+        # Apply dropout
+        x = self.dropout(x)
+
+        x = self.conv2(x)
+        return x
+
+
 class CSPLayer(nn.Module):
     """C3 in yolov5, CSP Bottleneck with 3 convolutions"""
 
@@ -208,6 +285,66 @@ class Focus(nn.Module):
             dim=1,
         )
         return self.conv(x)
+
+
+class CBAM(nn.Module):
+    """
+    Convolutional Block Attention Module (CBAM)
+    As described in "CBAM: Convolutional Block Attention Module" and
+    "Improved YOLOX Foreign Object Detection Algorithm for Transmission Lines"
+    Main publication: https://onlinelibrary.wiley.com/doi/epdf/10.1155/2022/5835693
+    Block description: https://arxiv.org/pdf/1807.06521
+
+    an be added to darknet backbone to dark3 dark4 and dark5 with number of base channels like in CSPLayer.
+    """
+    def __init__(self, channel, reduction=16):
+        super().__init__()
+        # Channel attention components
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+
+        # Shared MLP for channel attention
+        self.mlp = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False)
+        )
+
+        # Spatial attention components
+        self.conv_spatial = nn.Sequential(
+            nn.Conv2d(2, 1, kernel_size=7, padding=3, bias=False),
+            nn.Sigmoid()
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        # Save the input for the residual connection
+        residual = x
+
+        # ---------- Channel Attention ----------
+        # Apply average and max pooling
+        avg_out = self.mlp(self.avg_pool(x).view(x.size(0), -1))
+        max_out = self.mlp(self.max_pool(x).view(x.size(0), -1))
+
+        # Combine and apply sigmoid
+        channel_attention = self.sigmoid(avg_out + max_out).view(x.size(0), x.size(1), 1, 1)
+
+        # Apply channel attention
+        x_channel = x * channel_attention
+
+        # ---------- Spatial Attention ----------
+        # Generate spatial attention map
+        avg_spatial = torch.mean(x_channel, dim=1, keepdim=True)
+        max_spatial = torch.max(x_channel, dim=1, keepdim=True)[0]
+        spatial_features = torch.cat([avg_spatial, max_spatial], dim=1)
+        spatial_attention = self.conv_spatial(spatial_features)
+
+        # Apply spatial attention (sequentially after channel attention)
+        x_refined = x_channel * spatial_attention
+
+        # Add the residual connection
+        return x_refined + residual
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
