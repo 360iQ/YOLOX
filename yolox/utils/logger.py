@@ -96,7 +96,6 @@ def setup_logger(save_dir, distributed_rank=0, filename="log.txt", mode="a"):
         "<cyan>{name}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
     )
 
-    logger.remove()
     save_file = os.path.join(save_dir, filename)
     if mode == "o" and os.path.exists(save_file):
         os.remove(save_file)
