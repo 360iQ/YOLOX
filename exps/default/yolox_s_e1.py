@@ -15,7 +15,7 @@ class Exp(MyExp):
         self.random_size = (18, 25)    # multiscale range in 32px units for 800 base
 
         # --- training ---
-        self.max_epoch = 10
+        self.max_epoch = 100
         self.no_aug_epochs = 10
         self.warmup_epochs = 3
         self.eval_interval = 5
