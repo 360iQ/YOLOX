@@ -14,4 +14,4 @@ tensorboard
 thop==0.1.1.post2209072238
 torch==2.10.0  # When updating torch, please update torch version also in ComputerVisionAI repo.
 torchvision==0.25.0
-tqdm==4.67.1
+tqdm==4.67.3
